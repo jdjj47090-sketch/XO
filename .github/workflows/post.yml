@@ -1,0 +1,34 @@
+name: Kalam Auto Post
+
+on:
+  # Runs every hour, every day
+  # The script itself decides the content based on time:
+  # - Every hour: a poem/quote
+  # - Every day at 07:00 Iraq/Saudi time (04:00 UTC): a Quran verse
+  # - Every Friday at 07:00 Iraq/Saudi time: a Jumu'a Mubaraka message
+  schedule:
+    - cron: "0 * * * *"
+  # Allows manual run from the Actions tab for testing
+  workflow_dispatch:
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run the post script
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python post_to_telegram.py
