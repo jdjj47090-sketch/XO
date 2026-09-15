@@ -412,6 +412,1556 @@
           <div class="label">كود الغرفة</div>
           <div class="code" id="roomCodeText">----</div>
         </div>
+        <button class="copy-btn" id="copyBtn" title="نسخ الكود">⧉</button>
+        <button class="copy-btn" id="copyLinkBtn" title="نسخ رابط الدعوة">🔗</button>
+      </div>
+      <div class="local-badge hidden" id="localBadge">لعب محلي</div>
+      <div class="room-top-right">
+        <button class="icon-btn hidden" id="chatToggleBtn" title="الدردشة">💬<span class="chat-dot hidden" id="chatDot"></span></button>
+        <button class="exit-btn" id="exitBtn">خروج</button>
+      </div>
+    </div>
+
+    <div class="conn-row" id="connRow">
+      <div class="conn-item"><span class="conn-dot on"></span><span id="meLabel">إنت (✕)</span></div>
+      <div class="conn-item"><span class="conn-dot" id="oppDot"></span><span id="oppLabel">صديقك</span></div>
+    </div>
+
+    <div class="scoreboard">
+      <div class="score-box x">
+        <div class="score-label" id="scoreLabelX">✕</div>
+        <div class="score-value" id="scoreX">0</div>
+      </div>
+      <div class="score-box draw">
+        <div class="score-label">تعادل</div>
+        <div class="score-value" id="scoreDraw">0</div>
+      </div>
+      <div class="score-box o">
+        <div class="score-label" id="scoreLabelO">◯</div>
+        <div class="score-value" id="scoreO">0</div>
+      </div>
+    </div>
+
+    <div class="status-bar">
+      <div class="status-text" id="statusText">بانتظار صديقك يدخل الكود...</div>
+      <div class="status-sub" id="statusSub"></div>
+    </div>
+
+    <div class="board" id="board"></div>
+
+    <div class="result-wrap" id="resultWrap"></div>
+
+    <div class="chat-panel hidden" id="chatPanel">
+      <div class="chat-messages" id="chatMessages"></div>
+      <div class="chat-emojis">
+        <button type="button" class="emoji-btn">😂</button>
+        <button type="button" class="emoji-btn">🙂</button>
+        <button type="button" class="emoji-btn">😎</button>
+        <button type="button" class="emoji-btn">❤️</button>
+        <button type="button" class="emoji-btn">👍</button>
+        <button type="button" class="emoji-btn">🔥</button>
+      </div>
+      <div class="chat-input-row">
+        <input type="text" id="chatInput" placeholder="اكتب شي..." maxlength="200">
+        <button class="btn btn-primary chat-send" id="chatSendBtn">ارسال</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  const landing = document.getElementById('landing');
+  const profileScreen = document.getElementById('profileScreen');
+  const friendsScreen = document.getElementById('friendsScreen');
+  const roomScreen = document.getElementById('room');
+
+  const btnCreate = document.getElementById('btnCreate');
+  const btnJoin = document.getElementById('btnJoin');
+  const btnLocal = document.getElementById('btnLocal');
+  const btnFriends = document.getElementById('btnFriends');
+  const btnInstall = document.getElementById('btnInstall');
+  const joinInput = document.getElementById('joinInput');
+  const landingError = document.getElementById('landingError');
+  const roomCodeText = document.getElementById('roomCodeText');
+  const copyBtn = document.getElementById('copyBtn');
+  const copyLinkBtn = document.getElementById('copyLinkBtn');
+  const exitBtn = document.getElementById('exitBtn');
+  const boardEl = document.getElementById('board');
+  const statusText = document.getElementById('statusText');
+  const statusSub = document.getElementById('statusSub');
+  const resultWrap = document.getElementById('resultWrap');
+  const meLabel = document.getElementById('meLabel');
+  const oppLabel = document.getElementById('oppLabel');
+  const oppDot = document.getElementById('oppDot');
+  const codePill = document.getElementById('codePill');
+  const localBadge = document.getElementById('localBadge');
+  const connRow = document.getElementById('connRow');
+  const scoreLabelX = document.getElementById('scoreLabelX');
+  const scoreLabelO = document.getElementById('scoreLabelO');
+  const scoreX = document.getElementById('scoreX');
+  const scoreO = document.getElementById('scoreO');
+  const scoreDraw = document.getElementById('scoreDraw');
+
+  // profile
+  const profileNameInput = document.getElementById('profileNameInput');
+  const profileStartBtn = document.getElementById('profileStartBtn');
+  const profileNameDisplay = document.getElementById('profileNameDisplay');
+  const profileIdDisplay = document.getElementById('profileIdDisplay');
+  const profileCopyBtn = document.getElementById('profileCopyBtn');
+  const profileEditBtn = document.getElementById('profileEditBtn');
+  const friendsBadge = document.getElementById('friendsBadge');
+
+  // friends screen
+  const friendsBackBtn = document.getElementById('friendsBackBtn');
+  const addFriendInput = document.getElementById('addFriendInput');
+  const addFriendBtn = document.getElementById('addFriendBtn');
+  const friendsMsg = document.getElementById('friendsMsg');
+  const reqSection = document.getElementById('reqSection');
+  const reqList = document.getElementById('reqList');
+  const friendsList = document.getElementById('friendsList');
+
+  // notif
+  const notifBanner = document.getElementById('notifBanner');
+  const notifText = document.getElementById('notifText');
+  const notifAcceptBtn = document.getElementById('notifAcceptBtn');
+  const notifDeclineBtn = document.getElementById('notifDeclineBtn');
+
+  // chat
+  const chatToggleBtn = document.getElementById('chatToggleBtn');
+  const chatDot = document.getElementById('chatDot');
+  const chatPanel = document.getElementById('chatPanel');
+  const chatMessages = document.getElementById('chatMessages');
+  const chatInput = document.getElementById('chatInput');
+  const chatSendBtn = document.getElementById('chatSendBtn');
+
+  const ID_PREFIX = 'xogame-iq-';
+  const SOCIAL_PREFIX = 'xogame-iq-u-';
+
+  let roomCode = null;
+  let localPlayer = null; // 'X' or 'O'
+  let peer = null;
+  let conn = null;
+  let cellEls = [];
+  let joinTimeoutHandle = null;
+  let mode = 'online'; // 'online' | 'local'
+  let friendOpponentName = null;
+  let cameFromFriends = false;
+
+  // ---- دخول سريع عبر رابط مباشر (?game=1234) ----
+  const urlParams = new URLSearchParams(window.location.search);
+  let pendingJoinCode = urlParams.get('game');
+  if(pendingJoinCode && !/^\d{4}$/.test(pendingJoinCode)) pendingJoinCode = null;
+  if(window.location.search){
+    history.replaceState({}, document.title, window.location.pathname);
+  }
+  function tryAutoJoin(){
+    if(pendingJoinCode){
+      const code = pendingJoinCode;
+      pendingJoinCode = null;
+      joinInput.value = code;
+      joinRoom();
+    }
+  }
+
+  let state = { board: Array(9).fill(null), turn: 'X', winner: null, line: null, round: 0 };
+  let scores = { X: 0, O: 0, draw: 0 };
+  let scoreCountedForRound = -1; // avoid double counting a round's result
+
+  const WIN_LINES = [
+    [0,1,2],[3,4,5],[6,7,8],
+    [0,3,6],[1,4,7],[2,5,8],
+    [0,4,8],[2,4,6]
+  ];
+
+  function checkResult(board){
+    for(const line of WIN_LINES){
+      const [a,b,c] = line;
+      if(board[a] && board[a]===board[b] && board[a]===board[c]){
+        return { winner: board[a], line };
+      }
+    }
+    if(board.every(v => v)) return { winner: 'draw', line: null };
+    return { winner: null, line: null };
+  }
+
+  function buildBoard(){
+    boardEl.innerHTML = '';
+    cellEls = [];
+    for(let i=0;i<9;i++){
+      const c = document.createElement('div');
+      c.className = 'cell';
+      c.dataset.index = i;
+      c.addEventListener('click', () => onCellClick(i));
+      boardEl.appendChild(c);
+      cellEls.push(c);
+    }
+  }
+  buildBoard();
+
+  copyBtn.addEventListener('click', async () => {
+    try{
+      await navigator.clipboard.writeText(roomCode);
+    }catch(e){
+      const ta = document.createElement('textarea');
+      ta.value = roomCode;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    copyBtn.classList.add('copied');
+    copyBtn.textContent = '✓';
+    setTimeout(() => {
+      copyBtn.classList.remove('copied');
+      copyBtn.textContent = '⧉';
+    }, 1400);
+  });
+
+  copyLinkBtn.addEventListener('click', async () => {
+    const link = window.location.origin + window.location.pathname + '?game=' + roomCode;
+    try{
+      await navigator.clipboard.writeText(link);
+    }catch(e){
+      const ta = document.createElement('textarea');
+      ta.value = link;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    copyLinkBtn.classList.add('copied');
+    copyLinkBtn.textContent = '✓';
+    setTimeout(() => {
+      copyLinkBtn.classList.remove('copied');
+      copyLinkBtn.textContent = '🔗';
+    }, 1400);
+  });
+
+  exitBtn.addEventListener('click', () => leaveRoom());
+  btnCreate.addEventListener('click', () => {
+    btnCreate.disabled = true;
+    landingError.textContent = '';
+    createRoom(0);
+  });
+  btnJoin.addEventListener('click', () => joinRoom());
+  btnLocal.addEventListener('click', () => startLocalGame());
+  joinInput.addEventListener('input', () => {
+    joinInput.value = joinInput.value.replace(/\D/g,'');
+  });
+  joinInput.addEventListener('keydown', (e) => {
+    if(e.key === 'Enter') joinRoom();
+  });
+
+  /* ---------- Rotating Iraqi city names on the landing screen ---------- */
+  const IRAQ_CITIES = [
+    'بغداد','البصرة','الموصل','أربيل','النجف','كربلاء','الرمادي','بعقوبة',
+    'كركوك','الكوت','العمارة','الناصرية','السماوة','الديوانية','تكريت',
+    'دهوك','السليمانية','الحلة'
+  ];
+  const cityAEl = document.getElementById('cityA');
+  const cityBEl = document.getElementById('cityB');
+  if(cityAEl && cityBEl){
+    function pickCityPair(){
+      const i = Math.floor(Math.random() * IRAQ_CITIES.length);
+      let j = Math.floor(Math.random() * IRAQ_CITIES.length);
+      if(j === i) j = (j + 1) % IRAQ_CITIES.length;
+      return [IRAQ_CITIES[i], IRAQ_CITIES[j]];
+    }
+    setInterval(() => {
+      cityAEl.classList.add('fade');
+      cityBEl.classList.add('fade');
+      setTimeout(() => {
+        const [a, b] = pickCityPair();
+        cityAEl.textContent = a;
+        cityBEl.textContent = b;
+        cityAEl.classList.remove('fade');
+        cityBEl.classList.remove('fade');
+      }, 350);
+    }, 3500);
+  }
+
+  function genCode(){
+    return String(Math.floor(1000 + Math.random()*9000));
+  }
+  function generateUserId(){
+    return String(Math.floor(100000 + Math.random()*900000));
+  }
+
+  function resetState(round){
+    state = {
+      board: Array(9).fill(null),
+      turn: (round % 2 === 0) ? 'X' : 'O',
+      winner: null,
+      line: null,
+      round: round
+    };
+  }
+
+  function resetScores(){
+    scores = { X: 0, O: 0, draw: 0 };
+    scoreCountedForRound = -1;
+  }
+
+  function tallyScoreIfNeeded(){
+    if(!state.winner) return;
+    if(scoreCountedForRound === state.round) return; // already counted this round
+    scoreCountedForRound = state.round;
+    if(state.winner === 'draw'){
+      scores.draw++;
+    }else{
+      scores[state.winner]++;
+    }
+  }
+
+  function renderScoreboard(){
+    if(mode === 'local' || localPlayer === 'X'){
+      scoreLabelX.textContent = mode === 'local' ? '✕' : 'إنت ✕';
+      scoreLabelO.textContent = mode === 'local' ? '◯' : 'صديقك ◯';
+    }else{
+      scoreLabelX.textContent = 'صديقك ✕';
+      scoreLabelO.textContent = 'إنت ◯';
+    }
+    scoreX.textContent = scores.X;
+    scoreO.textContent = scores.O;
+    scoreDraw.textContent = scores.draw;
+  }
+
+  function isConnected(){
+    return !!(conn && conn.open);
+  }
+
+  function sendMsg(obj){
+    if(isConnected()) conn.send(obj);
+  }
+
+  /* =========================================================
+     PROFILE (identity, persisted)
+  ========================================================= */
+  function loadProfile(){
+    try{ return JSON.parse(localStorage.getItem('xo_profile') || 'null'); }catch(e){ return null; }
+  }
+  function saveProfile(){
+    localStorage.setItem('xo_profile', JSON.stringify(myProfile));
+  }
+  function loadFriends(){
+    try{ return JSON.parse(localStorage.getItem('xo_friends') || '[]'); }catch(e){ return []; }
+  }
+  function saveFriends(){
+    localStorage.setItem('xo_friends', JSON.stringify(friends));
+  }
+  function loadIncoming(){
+    try{ return JSON.parse(localStorage.getItem('xo_incoming') || '[]'); }catch(e){ return []; }
+  }
+  function saveIncoming(){
+    localStorage.setItem('xo_incoming', JSON.stringify(incomingRequests));
+  }
+
+  let myProfile = loadProfile();
+  let friends = loadFriends();
+  let incomingRequests = loadIncoming();
+  let socialPeer = null;
+  let socialPeerReady = false;
+  let notifQueue = [];
+  let notifShowing = false;
+
+  function refreshProfileBar(){
+    profileNameDisplay.textContent = myProfile.name;
+    profileIdDisplay.textContent = myProfile.id;
+  }
+
+  function updateFriendsBadge(){
+    if(incomingRequests.length > 0){
+      friendsBadge.textContent = incomingRequests.length;
+      friendsBadge.classList.remove('hidden');
+    }else{
+      friendsBadge.classList.add('hidden');
+    }
+  }
+
+  if(myProfile){
+    landing.classList.remove('hidden');
+    profileScreen.classList.add('hidden');
+    refreshProfileBar();
+    updateFriendsBadge();
+    try{ initSocialPeer(); }catch(e){ console.error('initSocialPeer failed', e); }
+  }else{
+    landing.classList.add('hidden');
+    profileScreen.classList.remove('hidden');
+  }
+  tryAutoJoin();
+
+  profileStartBtn.addEventListener('click', () => {
+    const name = (profileNameInput.value || '').trim().slice(0,20) || 'لاعب';
+    myProfile = { id: generateUserId(), name };
+    saveProfile();
+    profileScreen.classList.add('hidden');
+    landing.classList.remove('hidden');
+    refreshProfileBar();
+    updateFriendsBadge();
+    try{ initSocialPeer(); }catch(e){ console.error('initSocialPeer failed', e); }
+    tryAutoJoin();
+  });
+  profileNameInput.addEventListener('keydown', (e) => {
+    if(e.key === 'Enter') profileStartBtn.click();
+  });
+
+  profileEditBtn.addEventListener('click', () => {
+    const newName = prompt('غير اسمك:', myProfile.name);
+    if(newName && newName.trim()){
+      myProfile.name = newName.trim().slice(0,20);
+      saveProfile();
+      refreshProfileBar();
+    }
+  });
+
+  profileCopyBtn.addEventListener('click', async () => {
+    try{ await navigator.clipboard.writeText(myProfile.id); }
+    catch(e){
+      const ta = document.createElement('textarea');
+      ta.value = myProfile.id;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    profileCopyBtn.classList.add('copied');
+    profileCopyBtn.textContent = '✓';
+    setTimeout(() => {
+      profileCopyBtn.classList.remove('copied');
+      profileCopyBtn.textContent = '⧉';
+    }, 1400);
+  });
+
+  /* =========================================================
+     SOCIAL PEER (always-on identity peer for friends/invites)
+  ========================================================= */
+  let socialPeerRetryHandle = null;
+  let socialPeerRetryDelay = 2000;
+
+  function initSocialPeer(){
+    if(socialPeer) return;
+    if(typeof Peer === 'undefined'){
+      scheduleSocialPeerRetry(null);
+      return;
+    }
+    clearTimeout(socialPeerRetryHandle);
+    let p;
+    try{
+      p = new Peer(SOCIAL_PREFIX + myProfile.id);
+    }catch(e){
+      scheduleSocialPeerRetry(null);
+      return;
+    }
+    socialPeer = p;
+    p.on('open', () => {
+      socialPeerReady = true;
+      socialPeerRetryDelay = 2000;
+    });
+    p.on('connection', (incoming) => {
+      incoming.on('data', (d) => routeIncomingSocialData(d, incoming));
+      incoming.on('close', () => {
+        if(incoming === conn){ conn = null; render(); }
+      });
+      incoming.on('error', () => {
+        if(incoming === conn){ conn = null; render(); }
+      });
+    });
+    p.on('disconnected', () => {
+      socialPeerReady = false;
+      try{ p.reconnect(); }catch(e){ scheduleSocialPeerRetry(p); }
+    });
+    p.on('close', () => {
+      socialPeerReady = false;
+      if(socialPeer === p) socialPeer = null;
+      scheduleSocialPeerRetry(p);
+    });
+    p.on('error', (err) => {
+      socialPeerReady = false;
+      if(err && err.type === 'unavailable-id'){
+        return;
+      }
+      scheduleSocialPeerRetry(p);
+    });
+  }
+
+  function scheduleSocialPeerRetry(p){
+    clearTimeout(socialPeerRetryHandle);
+    socialPeerRetryHandle = setTimeout(() => {
+      if(p && socialPeer === p){
+        try{ p.destroy(); }catch(e){}
+        socialPeer = null;
+      }
+      socialPeerRetryDelay = Math.min(socialPeerRetryDelay * 1.5, 20000);
+      initSocialPeer();
+    }, socialPeerRetryDelay);
+  }
+
+  function routeIncomingSocialData(d, incoming){
+    if(!d || !d.type) return;
+    if(d.type === 'friend_request'){
+      if(!incomingRequests.some(r => r.id === d.id) && !friends.some(f => f.id === d.id)){
+        incomingRequests.push({ id: d.id, name: d.name });
+        saveIncoming();
+        updateFriendsBadge();
+        if(!friendsScreen.classList.contains('hidden')) renderFriendsScreen();
+      }
+      pushNotif('friend_request', { id: d.id, name: d.name });
+    }else if(d.type === 'friend_accept'){
+      if(!friends.some(f => f.id === d.id)){
+        friends.push({ id: d.id, name: d.name });
+        saveFriends();
+      }
+      if(!friendsScreen.classList.contains('hidden')) renderFriendsScreen();
+    }else if(d.type === 'friend_decline'){
+      // silent
+    }else if(d.type === 'game_invite'){
+      pushNotif('game_invite', { id: d.id, name: d.name, conn: incoming });
+    }else{
+      handleIncomingData(d, incoming);
+    }
+  }
+
+  /* -------- Friend requests -------- */
+  function sendFriendRequest(targetId){
+    if(targetId === myProfile.id){ setFriendsMsg('هذا الايدي متاعك انت 😅', true); return; }
+    if(friends.some(f => f.id === targetId)){ setFriendsMsg('هذا أصلاً صديقك', true); return; }
+    if(!socialPeer){ setFriendsMsg('صار خطأ، جرب مرة ثانية', true); return; }
+    setFriendsMsg('يرسل الطلب...', false);
+    const c = socialPeer.connect(SOCIAL_PREFIX + targetId, { reliable: true });
+    let settled = false;
+    const to = setTimeout(() => {
+      if(!settled){ settled = true; try{ c.close(); }catch(e){} setFriendsMsg('ما لكينا هذا الايدي، تأكد منه', true); }
+    }, 8000);
+    c.on('open', () => {
+      settled = true; clearTimeout(to);
+      c.send({ type: 'friend_request', id: myProfile.id, name: myProfile.name });
+      setFriendsMsg('تم إرسال الطلب ✓', false);
+      setTimeout(() => { try{ c.close(); }catch(e){} }, 1200);
+    });
+    c.on('error', () => {
+      if(!settled){ settled = true; clearTimeout(to); setFriendsMsg('صديقك مو متصل حالياً، خله يفتح اللعبة وجرب مرة ثانية', true); }
+    });
+  }
+
+  function acceptFriendRequest(id, name){
+    incomingRequests = incomingRequests.filter(r => r.id !== id);
+    saveIncoming();
+    if(!friends.some(f => f.id === id)){
+      friends.push({ id, name });
+      saveFriends();
+    }
+    updateFriendsBadge();
+    renderFriendsScreen();
+    if(socialPeer){
+      const c = socialPeer.connect(SOCIAL_PREFIX + id, { reliable: true });
+      c.on('open', () => {
+        c.send({ type: 'friend_accept', id: myProfile.id, name: myProfile.name });
+        setTimeout(() => { try{ c.close(); }catch(e){} }, 1200);
+      });
+    }
+  }
+
+  function declineFriendRequest(id){
+    incomingRequests = incomingRequests.filter(r => r.id !== id);
+    saveIncoming();
+    updateFriendsBadge();
+    renderFriendsScreen();
+  }
+
+  /* -------- Game invites -------- */
+  function inviteFriendToPlay(friend){
+    if(!socialPeer){ setFriendsMsg('صار خطأ، جرب مرة ثانية', true); return; }
+    setFriendsMsg('يتصل بـ ' + friend.name + '...', false);
+    if(peer){ try{ peer.destroy(); }catch(e){} peer = null; }
+    if(conn){ try{ conn.close(); }catch(e){} conn = null; }
+    const c = socialPeer.connect(SOCIAL_PREFIX + friend.id, { reliable: true });
+    let settled = false;
+    const to = setTimeout(() => {
+      if(!settled){ settled = true; try{ c.close(); }catch(e){} setFriendsMsg(friend.name + ' مو متصل حالياً', true); }
+    }, 8000);
+    c.on('open', () => {
+      c.send({ type: 'game_invite', id: myProfile.id, name: myProfile.name });
+    });
+    c.on('data', (d) => {
+      if(d.type === 'game_invite_accept'){
+        settled = true; clearTimeout(to);
+        startFriendGame(c, friend.name, true);
+      }else if(d.type === 'game_invite_decline'){
+        settled = true; clearTimeout(to);
+        setFriendsMsg(friend.name + ' رفض الدعوة', true);
+        try{ c.close(); }catch(e){}
+      }else{
+        handleIncomingData(d, c);
+      }
+    });
+    c.on('close', () => { if(c === conn){ conn = null; render(); } });
+    c.on('error', () => {
+      if(!settled){ settled = true; clearTimeout(to); setFriendsMsg(friend.name + ' مو متصل حالياً', true); }
+    });
+  }
+
+  function acceptGameInvite(n){
+    try{ n.conn.send({ type: 'game_invite_accept' }); }catch(e){}
+    startFriendGame(n.conn, n.name, false);
+  }
+
+  function declineGameInvite(n){
+    try{ n.conn.send({ type: 'game_invite_decline' }); }catch(e){}
+    try{ n.conn.close(); }catch(e){}
+  }
+
+  function startFriendGame(connection, friendName, iAmHost){
+    if(peer){ try{ peer.destroy(); }catch(e){} peer = null; }
+    if(conn && conn !== connection){ try{ conn.close(); }catch(e){} }
+
+    conn = connection;
+    roomCode = null;
+    localPlayer = iAmHost ? 'X' : 'O';
+    friendOpponentName = friendName;
+    mode = 'online';
+    cameFromFriends = true;
+
+    friendsScreen.classList.add('hidden');
+    landing.classList.add('hidden');
+    roomScreen.classList.remove('hidden');
+
+    codePill.classList.add('hidden');
+    connRow.classList.remove('hidden');
+    localBadge.classList.remove('hidden');
+    localBadge.textContent = 'صديق: ' + friendName;
+
+    meLabel.textContent = localPlayer === 'X' ? 'إنت (✕)' : 'إنت (◯)';
+    oppLabel.textContent = friendName + (localPlayer === 'X' ? ' (◯)' : ' (✕)');
+
+    chatToggleBtn.classList.remove('hidden');
+    chatPanel.classList.add('hidden');
+    clearChat();
+
+    resetState(0);
+    resetScores();
+    render();
+  }
+
+  /* -------- Notifications banner (friend requests / game invites) -------- */
+  function pushNotif(kind, payload){
+    notifQueue.push(Object.assign({ kind }, payload));
+    if(!notifShowing) showNextNotif();
+  }
+  function showNextNotif(){
+    if(notifQueue.length === 0){ notifShowing = false; notifBanner.classList.add('hidden'); return; }
+    notifShowing = true;
+    const n = notifQueue[0];
+    notifBanner.classList.remove('hidden');
+    if(n.kind === 'friend_request'){
+      notifText.textContent = n.name + ' يريد يضيفك كصديق';
+      notifAcceptBtn.onclick = () => { acceptFriendRequest(n.id, n.name); dismissNotif(); };
+      notifDeclineBtn.onclick = () => { declineFriendRequest(n.id); dismissNotif(); };
+    }else if(n.kind === 'game_invite'){
+      notifText.textContent = n.name + ' يدعوك تلعبون سوا';
+      notifAcceptBtn.onclick = () => { acceptGameInvite(n); dismissNotif(); };
+      notifDeclineBtn.onclick = () => { declineGameInvite(n); dismissNotif(); };
+    }
+  }
+  function dismissNotif(){
+    notifQueue.shift();
+    notifBanner.classList.add('hidden');
+    setTimeout(showNextNotif, 300);
+  }
+
+  /* -------- Friends screen rendering -------- */
+  function setFriendsMsg(text, isError){
+    friendsMsg.textContent = text || '';
+    friendsMsg.classList.toggle('info', !isError);
+  }
+
+  function renderFriendsScreen(){
+    reqList.innerHTML = '';
+    incomingRequests.forEach((r) => {
+      const row = document.createElement('div');
+      row.className = 'req-row';
+      const info = document.createElement('span');
+      info.textContent = r.name + ' ';
+      const idSpan = document.createElement('span');
+      idSpan.className = 'dim';
+      idSpan.textContent = '#' + r.id;
+      info.appendChild(idSpan);
+      const actions = document.createElement('div');
+      actions.className = 'row-actions';
+      const accBtn = document.createElement('button');
+      accBtn.className = 'mini-btn accept';
+      accBtn.textContent = 'قبول';
+      accBtn.addEventListener('click', () => acceptFriendRequest(r.id, r.name));
+      const decBtn = document.createElement('button');
+      decBtn.className = 'mini-btn decline';
+      decBtn.textContent = 'رفض';
+      decBtn.addEventListener('click', () => declineFriendRequest(r.id));
+      actions.appendChild(accBtn);
+      actions.appendChild(decBtn);
+      row.appendChild(info);
+      row.appendChild(actions);
+      reqList.appendChild(row);
+    });
+    reqSection.classList.toggle('hidden', incomingRequests.length === 0);
+
+    friendsList.innerHTML = '';
+    if(friends.length === 0){
+      const empty = document.createElement('div');
+      empty.className = 'dim-msg';
+      empty.textContent = 'ما عندك أصدقاء بعد، ضيف وحد بالايدي متاعه 👆';
+      friendsList.appendChild(empty);
+    }else{
+      friends.forEach((f) => {
+        const row = document.createElement('div');
+        row.className = 'friend-row';
+        const info = document.createElement('span');
+        info.textContent = f.name + ' ';
+        const idSpan = document.createElement('span');
+        idSpan.className = 'dim';
+        idSpan.textContent = '#' + f.id;
+        info.appendChild(idSpan);
+        const playBtn = document.createElement('button');
+        playBtn.className = 'mini-btn play';
+        playBtn.textContent = '🎮 ادعه يلعب';
+        playBtn.addEventListener('click', () => inviteFriendToPlay(f));
+        row.appendChild(info);
+        row.appendChild(playBtn);
+        friendsList.appendChild(row);
+      });
+    }
+  }
+
+  btnFriends.addEventListener('click', () => {
+    setFriendsMsg('', false);
+    renderFriendsScreen();
+    landing.classList.add('hidden');
+    friendsScreen.classList.remove('hidden');
+  });
+  friendsBackBtn.addEventListener('click', () => {
+    friendsScreen.classList.add('hidden');
+    landing.classList.remove('hidden');
+  });
+  addFriendBtn.addEventListener('click', () => {
+    const id = addFriendInput.value.trim();
+    if(!/^\d{6}$/.test(id)){
+      setFriendsMsg('اكتب ايدي مكون من 6 أرقام', true);
+      return;
+    }
+    sendFriendRequest(id);
+    addFriendInput.value = '';
+  });
+  addFriendInput.addEventListener('input', () => {
+    addFriendInput.value = addFriendInput.value.replace(/\D/g,'');
+  });
+  addFriendInput.addEventListener('keydown', (e) => {
+    if(e.key === 'Enter') addFriendBtn.click();
+  });
+
+  /* =========================================================
+     CHAT
+  ========================================================= */
+  function clearChat(){
+    chatMessages.innerHTML = '';
+    chatDot.classList.add('hidden');
+  }
+  function addChatMessage(text, mine){
+    const empty = chatMessages.querySelector('.chat-empty');
+    if(empty) empty.remove();
+    const row = document.createElement('div');
+    row.className = 'chat-msg ' + (mine ? 'mine' : 'theirs');
+    row.textContent = text;
+    chatMessages.appendChild(row);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    if(!mine && chatPanel.classList.contains('hidden')){
+      chatDot.classList.remove('hidden');
+    }
+  }
+  function sendChatMessage(text){
+    text = (text || '').trim();
+    if(!text || !isConnected()) return;
+    addChatMessage(text, true);
+    sendMsg({ type: 'chat', text });
+  }
+  function sendChatFromInput(){
+    const v = chatInput.value;
+    if(!v.trim()) return;
+    sendChatMessage(v);
+    chatInput.value = '';
+  }
+  chatSendBtn.addEventListener('click', sendChatFromInput);
+  chatInput.addEventListener('keydown', (e) => {
+    if(e.key === 'Enter') sendChatFromInput();
+  });
+  document.querySelectorAll('.emoji-btn').forEach((btn) => {
+    btn.addEventListener('click', () => sendChatMessage(btn.textContent));
+  });
+  chatToggleBtn.addEventListener('click', () => {
+    chatPanel.classList.toggle('hidden');
+    if(!chatPanel.classList.contains('hidden')){
+      chatDot.classList.add('hidden');
+      chatInput.focus();
+    }
+  });
+
+  /* =========================================================
+     GAME DATA (unified for quick-room + friend connections)
+  ========================================================= */
+  function handleIncomingData(d, sourceConn){
+    if(!d || !d.type) return;
+    if(sourceConn !== conn) return;
+    if(d.type === 'move'){
+      applyRemoteMove(d.index);
+    }else if(d.type === 'rematch'){
+      resetState(d.round);
+      render();
+    }else if(d.type === 'chat'){
+      addChatMessage(d.text, false);
+    }
+  }
+
+  // ---------- Create room (host = X) ----------
+  function createRoom(attempt){
+    attempt = attempt || 0;
+    if(attempt > 8){
+      landingError.textContent = 'صار خطأ، حاول مرة ثانية.';
+      btnCreate.disabled = false;
+      return;
+    }
+    const code = genCode();
+    const p = new Peer(ID_PREFIX + code);
+
+    let settled = false;
+
+    p.on('open', () => {
+      if(settled) return;
+      settled = true;
+      peer = p;
+      roomCode = code;
+      localPlayer = 'X';
+      mode = 'online';
+      enterRoom();
+
+      peer.on('connection', (incoming) => {
+        if(conn){ incoming.close(); return; } // only one opponent
+        conn = incoming;
+        wireConnection();
+      });
+    });
+
+    p.on('error', (err) => {
+      if(settled) return;
+      if(err && err.type === 'unavailable-id'){
+        p.destroy();
+        createRoom(attempt + 1);
+      }else{
+        settled = true;
+        p.destroy();
+        landingError.textContent = 'ما كدرنا نتصل بالسيرفر، تأكد من الانترنت وحاول مرة ثانية.';
+        btnCreate.disabled = false;
+      }
+    });
+  }
+
+  // ---------- Join room (guest = O) ----------
+  function joinRoom(){
+    const code = joinInput.value.trim();
+    landingError.textContent = '';
+    if(!/^\d{4}$/.test(code)){
+      landingError.textContent = 'اكتب كود مكون من 4 أرقام.';
+      return;
+    }
+    btnJoin.disabled = true;
+
+    const p = new Peer();
+    let settled = false;
+
+    function fail(msg){
+      if(settled) return;
+      settled = true;
+      clearTimeout(joinTimeoutHandle);
+      p.destroy();
+      landingError.textContent = msg;
+      btnJoin.disabled = false;
+    }
+
+    p.on('open', () => {
+      const c = p.connect(ID_PREFIX + code, { reliable: true });
+      conn = c;
+
+      joinTimeoutHandle = setTimeout(() => {
+        fail('ما لكينا هذا الكود، تأكد منه وحاول مرة ثانية.');
+      }, 9000);
+
+      c.on('open', () => {
+        if(settled) return;
+        settled = true;
+        clearTimeout(joinTimeoutHandle);
+        peer = p;
+        roomCode = code;
+        localPlayer = 'O';
+        mode = 'online';
+        enterRoom();
+        wireConnection();
+      });
+
+      c.on('error', () => fail('ما لكينا هذا الكود، تأكد منه وحاول مرة ثانية.'));
+    });
+
+    p.on('error', (err) => {
+      if(err && err.type === 'peer-unavailable'){
+        fail('ما لكينا هذا الكود، تأكد منه وحاول مرة ثانية.');
+      }else{
+        fail('ما كدرنا نتصل بالسيرفر، تأكد من الانترنت وحاول مرة ثانية.');
+      }
+    });
+  }
+
+  // ---------- Local play (two players, same device) ----------
+  function startLocalGame(){
+    mode = 'local';
+    roomCode = null;
+    localPlayer = null;
+    friendOpponentName = null;
+    cameFromFriends = false;
+    landingError.textContent = '';
+    enterRoom();
+  }
+
+  function wireConnection(){
+    render(); // opponent just connected (or connecting)
+    if(conn.open){
+      render();
+    }else{
+      conn.on('open', () => render());
+    }
+    conn.on('data', (data) => handleIncomingData(data, conn));
+    conn.on('close', () => {
+      conn = null;
+      render();
+    });
+    conn.on('error', () => {
+      conn = null;
+      render();
+    });
+  }
+
+  function enterRoom(){
+    if(mode !== 'online' || !cameFromFriends){
+      friendOpponentName = null;
+      cameFromFriends = false;
+    }
+
+    landing.classList.add('hidden');
+    friendsScreen.classList.add('hidden');
+    roomScreen.classList.remove('hidden');
+
+    if(mode === 'local'){
+      codePill.classList.add('hidden');
+      connRow.classList.add('hidden');
+      localBadge.classList.remove('hidden');
+      localBadge.textContent = 'لعب محلي';
+      chatToggleBtn.classList.add('hidden');
+      chatPanel.classList.add('hidden');
+    }else{
+      codePill.classList.remove('hidden');
+      connRow.classList.remove('hidden');
+      localBadge.classList.add('hidden');
+      roomCodeText.textContent = roomCode;
+      chatToggleBtn.classList.remove('hidden');
+      chatPanel.classList.add('hidden');
+      if(localPlayer === 'X'){
+        meLabel.textContent = 'إنت (✕)';
+        oppLabel.textContent = 'صديقك (◯)';
+      }else{
+        meLabel.textContent = 'إنت (◯)';
+        oppLabel.textContent = 'صديقك (✕)';
+      }
+    }
+
+    clearChat();
+    resetState(0);
+    resetScores();
+    render();
+  }
+
+  function leaveRoom(){
+    if(conn){ try{ conn.close(); }catch(e){} }
+    if(peer){ try{ peer.destroy(); }catch(e){} }
+    conn = null;
+    peer = null;
+    roomCode = null;
+    localPlayer = null;
+    friendOpponentName = null;
+    mode = 'online';
+    clearChat();
+    chatPanel.classList.add('hidden');
+    roomScreen.classList.add('hidden');
+
+    if(cameFromFriends){
+      cameFromFriends = false;
+      renderFriendsScreen();
+      friendsScreen.classList.remove('hidden');
+    }else{
+      landing.classList.remove('hidden');
+    }
+    joinInput.value = '';
+    landingError.textContent = '';
+    btnCreate.disabled = false;
+    btnJoin.disabled = false;
+  }
+
+  function applyRemoteMove(index){
+    const oppPlayer = localPlayer === 'X' ? 'O' : 'X';
+    if(state.board[index]) return; // ignore invalid
+    state.board[index] = oppPlayer;
+    const result = checkResult(state.board);
+    state.winner = result.winner;
+    state.line = result.line;
+    state.turn = localPlayer;
+    render();
+  }
+
+  function render(){
+    if(mode === 'online'){
+      oppDot.classList.toggle('on', isConnected());
+    }
+
+    state.board.forEach((v, i) => {
+      const c = cellEls[i];
+      c.classList.remove('x','o','filled','win');
+      if(v){
+        c.textContent = v === 'X' ? '✕' : '◯';
+        c.classList.add(v.toLowerCase(), 'filled');
+      }else{
+        c.textContent = '';
+      }
+    });
+
+    const bothJoined = mode === 'local' ? true : isConnected();
+    const iAmTurn = mode === 'local' ? true : state.turn === localPlayer;
+    const gameOver = !!state.winner;
+
+    tallyScoreIfNeeded();
+    renderScoreboard();
+
+    cellEls.forEach((c, i) => {
+      const canPlay = bothJoined && !gameOver && iAmTurn && !state.board[i];
+      c.classList.toggle('disabled', !canPlay);
+    });
+
+    if(state.line){
+      state.line.forEach(i => cellEls[i].classList.add('win'));
+    }
+
+    if(!bothJoined){
+      statusText.textContent = (mode === 'online' && friendOpponentName)
+        ? 'انقطع الاتصال بـ ' + friendOpponentName + '...'
+        : (localPlayer === 'X'
+            ? 'بانتظار صديقك يدخل الكود...'
+            : 'انقطع الاتصال بصديقك...');
+      statusText.className = 'status-text';
+      statusSub.textContent = '';
+      resultWrap.innerHTML = '';
+      return;
+    }
+
+    if(gameOver){
+      resultWrap.innerHTML = '';
+      const box = document.createElement('div');
+      let msg, cls;
+      if(state.winner === 'draw'){
+        msg = 'تعادل! ما حد فاز';
+        cls = 'draw';
+      }else if(mode === 'local'){
+        msg = 'فاز اللاعب ' + (state.winner === 'X' ? '✕' : '◯') + '! 🎉';
+        cls = 'win' + (state.winner === 'O' ? ' as-o' : '');
+      }else if(state.winner === localPlayer){
+        msg = 'فزت! 🎉';
+        cls = 'win' + (localPlayer === 'O' ? ' as-o' : '');
+      }else{
+        msg = 'خسرت هالجولة';
+        cls = 'lose';
+      }
+      box.className = 'result-text ' + cls;
+      box.textContent = msg;
+      resultWrap.appendChild(box);
+
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-outline';
+      btn.textContent = 'لعبة جديدة';
+      btn.style.maxWidth = '220px';
+      btn.style.margin = '0 auto';
+      btn.addEventListener('click', rematch);
+      resultWrap.appendChild(btn);
+
+      statusText.textContent = 'انتهت الجولة';
+      statusText.className = 'status-text';
+      statusSub.textContent = '';
+    }else{
+      resultWrap.innerHTML = '';
+      if(mode === 'local'){
+        statusText.textContent = 'دور اللاعب ' + (state.turn === 'X' ? '✕' : '◯');
+        statusText.className = 'status-text mine' + (state.turn === 'O' ? ' as-o' : '');
+      }else if(iAmTurn){
+        statusText.textContent = 'دورك';
+        statusText.className = 'status-text mine' + (localPlayer === 'O' ? ' as-o' : '');
+      }else{
+        statusText.textContent = 'دور صديقك';
+        statusText.className = 'status-text';
+      }
+      statusSub.textContent = '';
+    }
+  }
+
+  function onCellClick(index){
+    if(mode === 'online' && !isConnected()) return;
+    if(state.winner) return;
+    if(mode === 'online' && state.turn !== localPlayer) return;
+    if(state.board[index]) return;
+
+    const mover = mode === 'local' ? state.turn : localPlayer;
+    state.board[index] = mover;
+    const result = checkResult(state.board);
+    state.winner = result.winner;
+    state.line = result.line;
+    state.turn = mover === 'X' ? 'O' : 'X';
+
+    if(mode === 'online') sendMsg({ type: 'move', index });
+    render();
+  }
+
+  function rematch(){
+    const nextRound = (state.round || 0) + 1;
+    resetState(nextRound);
+    if(mode === 'online') sendMsg({ type: 'rematch', round: nextRound });
+    render();
+  }
+
+  /* =========================================================
+     PWA: install prompt + service worker registration
+  ========================================================= */
+  let deferredInstallPrompt = null;
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    btnInstall.classList.remove('hidden');
+  });
+
+  btnInstall.addEventListener('click', async () => {
+    if(!deferredInstallPrompt) return;
+    btnInstall.disabled = true;
+    deferredInstallPrompt.prompt();
+    try{
+      await deferredInstallPrompt.userChoice;
+    }catch(e){}
+    deferredInstallPrompt = null;
+    btnInstall.classList.add('hidden');
+    btnInstall.disabled = false;
+  });
+
+  window.addEventListener('appinstalled', () => {
+    btnInstall.classList.add('hidden');
+    deferredInstallPrompt = null;
+  });
+
+  // Already running as an installed app? no need to show the button at all.
+  if(window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone){
+    btnInstall.classList.add('hidden');
+  }
+
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./service-worker.js').catch((e) => {
+        console.error('service worker registration failed', e);
+      });
+    });
+  }
+
+})();
+</script>
+
+</body>
+</html>
+    color:var(--text);
+    font-family:'Tajawal', sans-serif;
+  }
+  h1,h2,h3,.display{ font-family:'Cairo', sans-serif; }
+  .app{
+    min-height:100vh;
+    display:flex; align-items:center; justify-content:center;
+    padding:24px 16px;
+    position:relative;
+  }
+  .screen{ width:100%; max-width:420px; }
+
+  /* ---------- Notif banner ---------- */
+  .notif-banner{
+    position:fixed; top:14px; left:50%; transform:translateX(-50%);
+    width:calc(100% - 32px); max-width:420px;
+    background:var(--card); border:1px solid var(--o-color); border-radius:14px;
+    padding:12px 16px; z-index:60;
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    box-shadow:0 8px 24px rgba(0,0,0,.45);
+    animation: dropin .25s ease;
+  }
+  @keyframes dropin{ from{ opacity:0; transform:translate(-50%,-14px);} to{ opacity:1; transform:translate(-50%,0);} }
+  .notif-text{ font-size:13.5px; font-weight:700; flex:1; }
+  .notif-actions{ display:flex; gap:6px; flex:none; }
+
+  /* ---------- Landing ---------- */
+  .landing{ text-align:center; }
+  .brand{
+    font-size:52px; font-weight:800; letter-spacing:2px; margin:0 0 4px;
+  }
+  .brand span:first-child{ color:var(--x-color); }
+  .brand span:last-child{ color:var(--o-color); }
+  .tagline{ color:var(--text-dim); font-size:15px; margin:0 0 20px; }
+
+  .cities{
+    display:flex; align-items:center; justify-content:center;
+    gap:10px; margin-bottom:24px; color:var(--text-dim); font-size:14px;
+  }
+  .cities span#cityA, .cities span#cityB{
+    display:inline-block; min-width:44px; transition:opacity .35s ease;
+  }
+  .cities span#cityA.fade, .cities span#cityB.fade{ opacity:0; }
+  .city-dot{
+    width:9px; height:9px; border-radius:50%; flex:none;
+  }
+  .city-dot.a{ background:var(--x-color); box-shadow:0 0 10px rgba(232,163,61,.7); }
+  .city-dot.b{ background:var(--o-color); box-shadow:0 0 10px rgba(79,189,176,.7); }
+  .link-line{
+    width:70px; height:1px; position:relative; overflow:visible;
+    background: repeating-linear-gradient(90deg, var(--text-dim) 0 5px, transparent 5px 10px);
+    opacity:.5;
+  }
+  .link-line::after{
+    content:''; position:absolute; top:-3px; width:7px; height:7px; border-radius:50%;
+    background:var(--text); opacity:.9;
+    animation: travel 2.6s linear infinite;
+  }
+  @keyframes travel{
+    0%{ right:0; opacity:0; }
+    10%{ opacity:1; }
+    90%{ opacity:1; }
+    100%{ right:100%; opacity:0; }
+  }
+
+  .btn{
+    display:block; width:100%; border:none; border-radius:14px;
+    padding:16px; font-family:'Tajawal',sans-serif; font-weight:700; font-size:16px;
+    cursor:pointer; transition:transform .15s ease, filter .15s ease;
+  }
+  .btn:disabled{ opacity:.55; cursor:default; }
+  .btn:active{ transform:scale(.97); }
+  .btn-primary{ background:var(--x-color); color:#20150a; margin-bottom:14px; }
+  .btn-primary:hover{ filter:brightness(1.08); }
+  .btn-outline{
+    background:transparent; color:var(--o-color); border:1.5px solid var(--o-color);
+    margin-bottom:14px;
+  }
+  .btn-outline:hover{ background:rgba(79,189,176,.08); }
+  .btn-ghost{
+    background:transparent; color:var(--text-dim); border:1px solid var(--line);
+  }
+
+  .divider-word{ color:var(--text-dim); font-size:13px; margin:18px 0; position:relative; }
+
+  .join-row{ display:flex; gap:8px; margin-top:6px; }
+  .join-row input{
+    flex:1; min-width:0; background:var(--card); border:1.5px solid var(--line);
+    border-radius:12px; color:var(--text); font-family:'Cairo',sans-serif; font-weight:700;
+    font-size:20px; letter-spacing:4px; text-align:center; padding:14px 8px;
+  }
+  .join-row input:focus{ outline:none; border-color:var(--o-color); }
+  .join-row .btn{ width:auto; padding:0 20px; margin-bottom:0; }
+
+  .error-msg{
+    color:var(--danger); font-size:13px; margin-top:10px; min-height:16px;
+  }
+  .error-msg.info{ color:var(--text-dim); }
+
+  /* ---------- Profile bar ---------- */
+  .profile-bar{
+    display:flex; align-items:center; justify-content:space-between;
+    background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:10px 14px; margin-bottom:22px; text-align:right;
+  }
+  .profile-name{ font-family:'Cairo',sans-serif; font-weight:700; font-size:15px; cursor:pointer; }
+  .profile-id{ font-size:12px; color:var(--text-dim); margin-top:2px; }
+  .profile-actions{ display:flex; gap:6px; }
+  .profile-actions .copy-btn{ width:30px; height:30px; font-size:13px; }
+
+  .name-input{
+    width:100%; background:var(--card); border:1.5px solid var(--line);
+    border-radius:12px; color:var(--text); font-family:'Tajawal',sans-serif;
+    font-size:16px; padding:14px; text-align:center;
+  }
+  .name-input:focus{ outline:none; border-color:var(--o-color); }
+
+  .badge{
+    background:var(--danger); color:#fff; font-size:11px; font-weight:700;
+    border-radius:100px; padding:1px 7px; margin-inline-start:6px;
+  }
+
+  /* ---------- Friends screen ---------- */
+  .friends-top{
+    display:flex; align-items:center; justify-content:space-between; margin-bottom:22px;
+  }
+  .add-friend-row{ display:flex; gap:8px; margin-bottom:6px; }
+  .add-friend-row input{
+    flex:1; min-width:0; background:var(--card); border:1.5px solid var(--line);
+    border-radius:12px; color:var(--text); font-family:'Cairo',sans-serif; font-weight:700;
+    font-size:18px; letter-spacing:2px; text-align:center; padding:12px 8px;
+  }
+  .add-friend-row input:focus{ outline:none; border-color:var(--o-color); }
+  .add-friend-row .btn{ width:auto; padding:0 16px; margin-bottom:0; }
+
+  .section-title{ font-size:13px; color:var(--text-dim); margin:20px 0 8px; font-weight:700; }
+  .req-row, .friend-row{
+    display:flex; align-items:center; justify-content:space-between;
+    background:var(--card); border:1px solid var(--line); border-radius:12px;
+    padding:10px 14px; margin-bottom:8px; font-size:14px; gap:10px;
+  }
+  .req-row .row-actions{ display:flex; gap:6px; flex:none; }
+  .dim{ color:var(--text-dim); font-size:12px; }
+  .dim-msg{ color:var(--text-dim); font-size:13px; text-align:center; padding:14px 4px; }
+
+  .mini-btn{
+    border:none; border-radius:100px; padding:7px 14px;
+    font-family:'Tajawal',sans-serif; font-weight:700; font-size:12.5px; cursor:pointer;
+    flex:none; white-space:nowrap;
+  }
+  .mini-btn.accept{ background:var(--o-color); color:#0c2624; }
+  .mini-btn.decline{ background:transparent; color:var(--danger); border:1px solid var(--danger); }
+  .mini-btn.play{ background:var(--x-color); color:#20150a; }
+
+  /* ---------- Room ---------- */
+  .room{ }
+  .room-top{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:26px; gap:10px;
+  }
+  .code-pill{
+    display:flex; align-items:center; gap:10px;
+    background:var(--card); border:1px solid var(--line);
+    border-radius:100px; padding:8px 8px 8px 16px;
+  }
+  .code-pill .label{ font-size:11px; color:var(--text-dim); }
+  .code-pill .code{
+    font-family:'Cairo',sans-serif; font-weight:700; font-size:18px; letter-spacing:3px;
+  }
+  .copy-btn{
+    background:var(--bg-soft); border:none; color:var(--text);
+    border-radius:100px; width:34px; height:34px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; font-size:15px;
+  }
+  .copy-btn.copied{ color:var(--o-color); }
+  .room-top-right{ display:flex; align-items:center; gap:10px; flex:none; }
+  .icon-btn{
+    background:var(--card); border:1px solid var(--line); color:var(--text);
+    width:36px; height:36px; border-radius:100px; position:relative;
+    cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center;
+    flex:none;
+  }
+  .chat-dot{
+    position:absolute; top:-2px; left:-2px; width:9px; height:9px; border-radius:50%;
+    background:var(--danger); border:2px solid var(--bg);
+  }
+  .exit-btn{
+    background:none; border:none; color:var(--text-dim); font-size:13px; cursor:pointer;
+    font-family:'Tajawal',sans-serif;
+  }
+  .local-badge{
+    background:var(--card); border:1px solid var(--line);
+    border-radius:100px; padding:10px 18px;
+    font-family:'Cairo',sans-serif; font-weight:700; font-size:15px;
+    max-width:52%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+
+  .status-bar{
+    text-align:center; margin-bottom:20px; min-height:44px;
+  }
+  .status-text{ font-size:15px; font-weight:700; }
+  .status-text.mine{ color:var(--x-color); }
+  .status-text.mine.as-o{ color:var(--o-color); }
+  .status-sub{ font-size:13px; color:var(--text-dim); margin-top:4px; }
+
+  .conn-row{
+    display:flex; justify-content:center; gap:18px; margin-bottom:18px; font-size:13px; color:var(--text-dim);
+  }
+  .conn-item{ display:flex; align-items:center; gap:6px; }
+  .conn-dot{ width:8px; height:8px; border-radius:50%; background:var(--line); }
+  .conn-dot.on{ background:var(--o-color); box-shadow:0 0 8px rgba(79,189,176,.7); }
+
+  .scoreboard{
+    display:flex; align-items:stretch; justify-content:center;
+    gap:8px; margin-bottom:18px;
+  }
+  .score-box{
+    flex:1; max-width:120px; background:var(--card); border:1px solid var(--line);
+    border-radius:14px; padding:10px 6px; text-align:center;
+  }
+  .score-box .score-label{ font-size:12px; color:var(--text-dim); margin-bottom:4px; }
+  .score-box .score-value{ font-family:'Cairo',sans-serif; font-weight:800; font-size:24px; }
+  .score-box.x .score-value{ color:var(--x-color); }
+  .score-box.o .score-value{ color:var(--o-color); }
+  .score-box.draw .score-value{ color:var(--text-dim); }
+
+  .board{
+    display:grid; grid-template-columns:repeat(3,1fr); gap:8px;
+    background:var(--line); border-radius:18px; padding:8px;
+    aspect-ratio:1/1;
+  }
+  .cell{
+    background:var(--card); border-radius:12px;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Cairo',sans-serif; font-weight:700; font-size:42px;
+    cursor:pointer; user-select:none; -webkit-tap-highlight-color:transparent;
+    transition:background .15s ease;
+  }
+  .cell.disabled{ cursor:default; }
+  .cell:not(.filled):not(.disabled):active{ background:var(--bg-soft); }
+  .cell.x{ color:var(--x-color); }
+  .cell.o{ color:var(--o-color); }
+  .cell.win{ background:rgba(232,163,61,.14); }
+  .cell.o.win{ background:rgba(79,189,176,.14); }
+
+  .result-wrap{ margin-top:22px; text-align:center; min-height:78px; }
+  .result-text{ font-size:19px; font-weight:800; margin-bottom:14px; }
+  .result-text.win{ color:var(--x-color); }
+  .result-text.win.as-o{ color:var(--o-color); }
+  .result-text.lose{ color:var(--danger); }
+  .result-text.draw{ color:var(--text-dim); }
+
+  /* ---------- Chat ---------- */
+  .chat-panel{
+    margin-top:16px; background:var(--card); border:1px solid var(--line);
+    border-radius:16px; padding:12px;
+  }
+  .chat-messages{
+    max-height:160px; overflow-y:auto; display:flex; flex-direction:column;
+    gap:6px; margin-bottom:10px; padding-inline-end:4px;
+  }
+  .chat-msg{
+    max-width:75%; width:fit-content; padding:8px 12px; border-radius:14px;
+    font-size:14px; word-break:break-word;
+  }
+  .chat-msg.mine{ margin-inline-start:auto; background:var(--x-color); color:#20150a; }
+  .chat-msg.theirs{ margin-inline-end:auto; background:var(--bg-soft); border:1px solid var(--line); }
+  .chat-empty{ color:var(--text-dim); font-size:12.5px; text-align:center; padding:6px; }
+  .chat-emojis{ display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
+  .emoji-btn{
+    background:var(--bg-soft); border:1px solid var(--line); border-radius:10px;
+    font-size:20px; padding:6px 10px; cursor:pointer; line-height:1;
+  }
+  .chat-input-row{ display:flex; gap:8px; }
+  .chat-input-row input{
+    flex:1; min-width:0; background:var(--bg-soft); border:1.5px solid var(--line);
+    border-radius:12px; color:var(--text); font-family:'Tajawal',sans-serif;
+    font-size:14px; padding:10px 12px;
+  }
+  .chat-input-row input:focus{ outline:none; border-color:var(--o-color); }
+  .chat-send{ width:auto; padding:0 18px; margin:0; }
+
+  .hidden{ display:none !important; }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- NOTIFICATIONS -->
+  <div class="notif-banner hidden" id="notifBanner">
+    <div class="notif-text" id="notifText"></div>
+    <div class="notif-actions">
+      <button class="mini-btn accept" id="notifAcceptBtn">قبول</button>
+      <button class="mini-btn decline" id="notifDeclineBtn">رفض</button>
+    </div>
+  </div>
+
+  <!-- PROFILE SETUP (first run) -->
+  <div class="screen landing hidden" id="profileScreen">
+    <h1 class="brand"><span>✕</span><span>◯</span></h1>
+    <p class="tagline">شنو اسمك، حتى أصدقائك يعرفونك؟</p>
+    <input type="text" id="profileNameInput" class="name-input" placeholder="اسمك" maxlength="20">
+    <button class="btn btn-primary" id="profileStartBtn" style="margin-top:14px;">خلي نبدأ</button>
+  </div>
+
+  <!-- LANDING -->
+  <div class="screen landing" id="landing">
+    <div class="profile-bar" id="profileBar">
+      <div>
+        <div class="profile-name" id="profileNameDisplay" title="اضغط لتغيير اسمك">—</div>
+        <div class="profile-id">الايدي: <span id="profileIdDisplay">------</span></div>
+      </div>
+      <div class="profile-actions">
+        <button class="copy-btn" id="profileCopyBtn" title="نسخ الايدي">⧉</button>
+        <button class="copy-btn" id="profileEditBtn" title="تغيير الاسم">✎</button>
+      </div>
+    </div>
+
+    <h1 class="brand"><span>✕</span><span>◯</span></h1>
+    <p class="tagline">إكس أو، بس بينكم انتو الثنين</p>
+
+    <div class="cities">
+      <span id="cityA">بغداد</span>
+      <span class="link-line"></span>
+      <span id="cityB">أربيل</span>
+    </div>
+
+    <button class="btn btn-outline" id="btnFriends">👥 الأصدقاء <span class="badge hidden" id="friendsBadge">0</span></button>
+
+    <button class="btn btn-primary" id="btnCreate">إنشاء كود</button>
+
+    <div class="divider-word">أو</div>
+
+    <div class="join-row">
+      <input type="text" id="joinInput" placeholder="اكتب الكود" maxlength="4" inputmode="numeric">
+      <button class="btn btn-outline" id="btnJoin" style="margin-bottom:0;">إدخل كود</button>
+    </div>
+    <div class="error-msg" id="landingError"></div>
+
+    <div class="divider-word">أو</div>
+
+    <button class="btn btn-ghost" id="btnLocal">العبوا سوا بنفس الجهاز</button>
+
+    <button class="btn btn-ghost hidden" id="btnInstall" style="margin-top:14px;">⬇ ثبّت التطبيق على جهازك</button>
+  </div>
+
+  <!-- FRIENDS -->
+  <div class="screen friends-screen hidden" id="friendsScreen">
+    <div class="friends-top">
+      <button class="exit-btn" id="friendsBackBtn">‹ رجوع</button>
+      <h3 class="display" style="margin:0;">الأصدقاء</h3>
+      <span style="width:40px;"></span>
+    </div>
+
+    <div class="add-friend-row">
+      <input type="text" id="addFriendInput" placeholder="ايدي صديقك" maxlength="6" inputmode="numeric">
+      <button class="btn btn-outline" id="addFriendBtn">إرسال طلب</button>
+    </div>
+    <div class="error-msg" id="friendsMsg"></div>
+
+    <div id="reqSection" class="hidden">
+      <div class="section-title">طلبات صداقة جديدة</div>
+      <div id="reqList"></div>
+    </div>
+
+    <div class="section-title">أصدقائك</div>
+    <div id="friendsList"></div>
+  </div>
+
+  <!-- ROOM -->
+  <div class="screen room hidden" id="room">
+    <div class="room-top">
+      <div class="code-pill" id="codePill">
+        <div>
+          <div class="label">كود الغرفة</div>
+          <div class="code" id="roomCodeText">----</div>
+        </div>
         <button class="copy-btn" id="copyBtn" title="نسخ">⧉</button>
       </div>
       <div class="local-badge hidden" id="localBadge">لعب محلي</div>
